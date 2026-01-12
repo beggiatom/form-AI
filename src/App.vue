@@ -565,16 +565,26 @@ const sendToOpenAI = async () => {
 
     const rawText = await response.text();
     if (!response.ok) {
-      throw new Error(rawText || 'Errore nella risposta OpenAI.');
+      throw new Error(
+        `HTTP ${response.status} ${response.statusText}: ${rawText || 'empty response'}`
+      );
     }
 
-    const data = rawText ? JSON.parse(rawText) : {};
+    let data = {};
+    if (rawText) {
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseError) {
+        throw new Error(`Risposta non JSON: ${rawText}`);
+      }
+    }
     const message = data.choices?.[0]?.message?.content?.trim();
     if (!message) {
       throw new Error('Risposta vuota dall\'LLM.');
     }
     htmlOutput.value = message;
   } catch (error) {
+    console.error(error);
     alert(`${t('htmlError')}\n${error?.message || ''}`);
   } finally {
     isSending.value = false;
