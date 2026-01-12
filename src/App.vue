@@ -146,7 +146,7 @@
 
       <div class="panel">
         <h2>{{ t('jsonReady') }}</h2>
-        <textarea class="json-output" :value="jsonOutput" readonly></textarea>
+        <textarea class="json-output" :value="jsonOutput" readonly aria-readonly="true" tabindex="-1"></textarea>
         <div class="actions">
           <button class="button secondary" type="button" @click="copyJson">
             {{ copyLabel }}
@@ -165,7 +165,7 @@
         <div class="divider"></div>
 
         <h3>{{ t('llmInstructionsTitle') }}</h3>
-        <textarea class="json-output" :value="llmInstructions" readonly></textarea>
+        <textarea class="json-output" :value="llmInstructions" readonly aria-readonly="true" tabindex="-1"></textarea>
 
         <div class="divider"></div>
 
@@ -290,6 +290,22 @@ const translations = {
     jsonInvalid: "JSON non valido: manca 'fields'.",
     jsonInvalidShort: 'JSON non valido.',
     htmlError: 'Errore durante la generazione HTML.',
+    importErrorsTitle: 'JSON non valido. Correggi questi errori:',
+    importInvalidRoot: 'Struttura JSON non valida.',
+    importMissingFields: "Manca l'array 'fields'.",
+    importInvalidAction: 'form.action deve essere una stringa.',
+    importInvalidMethod: "form.method deve essere 'get' o 'post'.",
+    importInvalidField: ({ index }) => `Campo ${index}: struttura non valida.`,
+    importInvalidType: ({ index }) => `Campo ${index}: tipo non valido.`,
+    importInvalidMasked: ({ index }) => `Campo ${index}: masked e' consentito solo per type 'text'.`,
+    importInvalidOptions: ({ index }) => `Campo ${index}: options deve essere un array.`,
+    importInvalidOption: ({ index, optIndex }) =>
+      `Campo ${index}: opzione ${optIndex} deve avere label/value stringa.`,
+    importInvalidNumberRange: ({ index }) =>
+      `Campo ${index}: min/max/step devono essere numeri.`,
+    importInvalidDateRange: ({ index }) =>
+      `Campo ${index}: min/max devono essere stringhe in formato data.`,
+    importInvalidRows: ({ index }) => `Campo ${index}: rows deve essere numerico.`,
     llmInstructions: `Genera solo HTML valido, senza markdown o spiegazioni.
 Crea un form accessibile e pulito a partire dal JSON fornito.
 Distribuisci i campi con una griglia responsiva: 2 colonne su desktop, 1 su mobile.
@@ -360,6 +376,22 @@ Ritorna solo il markup HTML del form completo.`
     jsonInvalid: "Invalid JSON: missing 'fields'.",
     jsonInvalidShort: 'Invalid JSON.',
     htmlError: 'Error while generating HTML.',
+    importErrorsTitle: 'Invalid JSON. Fix these errors:',
+    importInvalidRoot: 'Invalid JSON structure.',
+    importMissingFields: "Missing 'fields' array.",
+    importInvalidAction: 'form.action must be a string.',
+    importInvalidMethod: "form.method must be 'get' or 'post'.",
+    importInvalidField: ({ index }) => `Field ${index}: invalid structure.`,
+    importInvalidType: ({ index }) => `Field ${index}: invalid type.`,
+    importInvalidMasked: ({ index }) => `Field ${index}: masked is only allowed for type 'text'.`,
+    importInvalidOptions: ({ index }) => `Field ${index}: options must be an array.`,
+    importInvalidOption: ({ index, optIndex }) =>
+      `Field ${index}: option ${optIndex} must have string label/value.`,
+    importInvalidNumberRange: ({ index }) =>
+      `Field ${index}: min/max/step must be numeric.`,
+    importInvalidDateRange: ({ index }) =>
+      `Field ${index}: min/max must be date strings.`,
+    importInvalidRows: ({ index }) => `Field ${index}: rows must be numeric.`,
     llmInstructions: `Generate valid HTML only, without markdown or explanations.
 Create a clean, accessible form from the provided JSON.
 Lay out fields using a responsive grid: 2 columns on desktop, 1 on mobile.
@@ -392,6 +424,7 @@ const createId = () =>
     ? crypto.randomUUID()
     : `field_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
+const allowedFieldTypes = ['text', 'textarea', 'email', 'number', 'select', 'radio', 'checkbox', 'date'];
 const typeNeedsOptions = (type) => ['select', 'radio'].includes(type);
 
 const defaultField = () => ({
@@ -435,6 +468,114 @@ const normalizeField = (raw) => {
   }
 
   return base;
+};
+
+const isNumberLike = (value) => {
+  if (value === '' || value === null || value === undefined) return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'string') return !Number.isNaN(Number(value));
+  return false;
+};
+
+const sanitizeImport = (parsed) => {
+  const errors = [];
+  const cleaned = { form: { action: '', method: 'post' }, fields: [] };
+
+  if (!parsed || typeof parsed !== 'object') {
+    errors.push(t('importInvalidRoot'));
+    return { cleaned, errors };
+  }
+
+  if (!Array.isArray(parsed.fields)) {
+    errors.push(t('importMissingFields'));
+    return { cleaned, errors };
+  }
+
+  if (parsed.form && typeof parsed.form === 'object') {
+    const action = parsed.form.action;
+    if (action === undefined || action === null || action === '') {
+      cleaned.form.action = '';
+    } else if (typeof action === 'string') {
+      cleaned.form.action = action;
+    } else {
+      errors.push(t('importInvalidAction'));
+    }
+
+    const method = parsed.form.method;
+    if (method === 'get' || method === 'post' || method === undefined || method === null || method === '') {
+      cleaned.form.method = method === 'get' ? 'get' : 'post';
+    } else {
+      errors.push(t('importInvalidMethod'));
+    }
+  }
+
+  parsed.fields.forEach((rawField, index) => {
+    if (!rawField || typeof rawField !== 'object') {
+      errors.push(t('importInvalidField', { index: index + 1 }));
+      return;
+    }
+
+    const type = allowedFieldTypes.includes(rawField.type) ? rawField.type : null;
+    if (!type) {
+      errors.push(t('importInvalidType', { index: index + 1 }));
+      return;
+    }
+
+    if (rawField.masked && type !== 'text') {
+      errors.push(t('importInvalidMasked', { index: index + 1 }));
+    }
+
+    if (typeNeedsOptions(type)) {
+      if (!Array.isArray(rawField.options)) {
+        errors.push(t('importInvalidOptions', { index: index + 1 }));
+      } else {
+        rawField.options.forEach((opt, optIndex) => {
+          const labelOk = typeof opt?.label === 'string' || opt?.label === undefined || opt?.label === null;
+          const valueOk = typeof opt?.value === 'string' || opt?.value === undefined || opt?.value === null;
+          if (!labelOk || !valueOk) {
+            errors.push(t('importInvalidOption', { index: index + 1, optIndex: optIndex + 1 }));
+          }
+        });
+      }
+    }
+
+    if (type === 'number') {
+      if (!isNumberLike(rawField.min) || !isNumberLike(rawField.max) || !isNumberLike(rawField.step)) {
+        errors.push(t('importInvalidNumberRange', { index: index + 1 }));
+      }
+    }
+
+    if (type === 'date') {
+      const minOk = rawField.min === undefined || rawField.min === null || rawField.min === '' || typeof rawField.min === 'string';
+      const maxOk = rawField.max === undefined || rawField.max === null || rawField.max === '' || typeof rawField.max === 'string';
+      if (!minOk || !maxOk) {
+        errors.push(t('importInvalidDateRange', { index: index + 1 }));
+      }
+    }
+
+    if (type === 'textarea' && !isNumberLike(rawField.rows)) {
+      errors.push(t('importInvalidRows', { index: index + 1 }));
+    }
+
+    const cleanedField = normalizeField({
+      id: rawField.id,
+      type,
+      label: typeof rawField.label === 'string' ? rawField.label : '',
+      name: typeof rawField.name === 'string' ? rawField.name : '',
+      required: Boolean(rawField.required),
+      placeholder: typeof rawField.placeholder === 'string' ? rawField.placeholder : '',
+      masked: Boolean(rawField.masked),
+      options: Array.isArray(rawField.options) ? rawField.options : [],
+      min: rawField.min ?? '',
+      max: rawField.max ?? '',
+      step: rawField.step ?? '',
+      rows: rawField.rows ?? 3
+    });
+
+    cleaned.fields.push(cleanedField);
+  });
+
+  return { cleaned, errors };
 };
 
 const buildJson = () => ({
@@ -606,13 +747,14 @@ const sendToOpenAI = async () => {
 const loadFromText = () => {
   try {
     const parsed = JSON.parse(jsonInput.value);
-    if (!parsed.fields || !Array.isArray(parsed.fields)) {
-      alert(t('jsonInvalid'));
+    const { cleaned, errors } = sanitizeImport(parsed);
+    if (errors.length) {
+      alert(`${t('importErrorsTitle')}\n${errors.join('\n')}`);
       return;
     }
-    formAction.value = parsed.form?.action ?? '';
-    formMethod.value = parsed.form?.method === 'get' ? 'get' : 'post';
-    fields.value = parsed.fields.map(normalizeField);
+    formAction.value = cleaned.form.action;
+    formMethod.value = cleaned.form.method;
+    fields.value = cleaned.fields;
   } catch (error) {
     alert(t('jsonInvalidShort'));
   }
