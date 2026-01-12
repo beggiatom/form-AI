@@ -1,5 +1,7 @@
 # Form AI
 
+[Italiano](#italiano) · [English](#english)
+
 ## Italiano
 
 Form AI e' un generatore di form guidato da configurazione JSON. Permette di definire campi, opzioni e impostazioni del form (action e method), esportare/importare la configurazione e inviare il JSON a un modello LLM per ottenere l'HTML finale del form.
