@@ -158,6 +158,9 @@
             {{ isSending ? t('sending') : t('sendToOpenAI') }}
           </button>
         </div>
+        <p v-if="errorMessage" class="error-message">
+          {{ errorMessage }}
+        </p>
 
         <div class="divider"></div>
 
@@ -223,6 +226,7 @@ const language = ref('it');
 const copyLabel = ref('Copia JSON');
 const copyHtmlLabel = ref('Copia HTML');
 const htmlOutput = ref('');
+const errorMessage = ref('');
 const isSending = ref(false);
 const fileInput = ref(null);
 
@@ -282,6 +286,7 @@ const translations = {
     copied: 'Copiato',
     copyError: 'Errore copia',
     copyHtml: 'Copia HTML',
+    genericErrorDetails: 'Nessun dettaglio disponibile.',
     jsonInvalid: "JSON non valido: manca 'fields'.",
     jsonInvalidShort: 'JSON non valido.',
     htmlError: 'Errore durante la generazione HTML.',
@@ -351,6 +356,7 @@ Ritorna solo il markup HTML del form completo.`
     copied: 'Copied',
     copyError: 'Copy error',
     copyHtml: 'Copy HTML',
+    genericErrorDetails: 'No additional details available.',
     jsonInvalid: "Invalid JSON: missing 'fields'.",
     jsonInvalidShort: 'Invalid JSON.',
     htmlError: 'Error while generating HTML.',
@@ -545,6 +551,7 @@ const downloadJson = () => {
 
 const sendToOpenAI = async () => {
   isSending.value = true;
+  errorMessage.value = '';
   try {
     const response = await fetch('/api/openai', {
       method: 'POST',
@@ -585,7 +592,12 @@ const sendToOpenAI = async () => {
     htmlOutput.value = message;
   } catch (error) {
     console.error(error);
-    alert(`${t('htmlError')}\n${error?.message || ''}`);
+    const details =
+      error?.message && error.message.trim().length
+        ? error.message
+        : t('genericErrorDetails');
+    errorMessage.value = `${t('htmlError')}\n${details}`;
+    alert(errorMessage.value);
   } finally {
     isSending.value = false;
   }
@@ -843,6 +855,16 @@ textarea {
   padding: 0.35rem 0.6rem;
   border-radius: 8px;
   cursor: pointer;
+}
+
+.error-message {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: #fbe9e6;
+  color: var(--danger);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
 }
 
 .json-output {
