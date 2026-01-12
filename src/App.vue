@@ -561,7 +561,7 @@ const sendToOpenAI = async () => {
       body: JSON.stringify({
         temperature: 0.2,
         messages: [
-          { role: 'system', content: llmInstructions },
+          { role: 'system', content: llmInstructions.value },
           {
             role: 'user',
             content: `JSON:\n${jsonOutput.value}`
